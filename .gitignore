@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+.ruff_cache/
+local.settings.json
+.python_packages/
+.azure/
+infra/main.json
+.DS_Store

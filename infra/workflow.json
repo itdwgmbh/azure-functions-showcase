@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": { "type": "Object", "defaultValue": {} },
+    "queueUrl": { "type": "String" },
+    "workflowIdentity": { "type": "String" },
+    "subjectFilter": { "type": "String" },
+    "mailFolder": { "type": "String" }
+  },
+  "triggers": {
+    "When_email_arrives": {
+      "type": "ApiConnectionNotification",
+      "inputs": {
+        "host": {
+          "connection": { "name": "@parameters('$connections')['office365']['connectionId']" }
+        },
+        "fetch": {
+          "method": "get",
+          "pathTemplate": { "template": "/v3/Mail/OnNewEmail" },
+          "queries": {
+            "folderPath": "@parameters('mailFolder')",
+            "importance": "Any",
+            "fetchOnlyWithAttachment": true,
+            "includeAttachments": false,
+            "subjectFilter": "@parameters('subjectFilter')"
+          }
+        },
+        "subscribe": {
+          "method": "post",
+          "pathTemplate": { "template": "/GraphMailSubscriptionPoke/$subscriptions" },
+          "body": { "NotificationUrl": "@listCallbackUrl()" },
+          "queries": {
+            "folderPath": "@parameters('mailFolder')",
+            "importance": "Any",
+            "fetchOnlyWithAttachment": true
+          }
+        }
+      },
+      "splitOn": "@triggerBody()?['value']",
+      "runtimeConfiguration": { "secureData": { "properties": ["outputs"] } }
+    }
+  },
+  "actions": {
+    "Enqueue_email": {
+      "type": "Http",
+      "inputs": {
+        "method": "POST",
+        "uri": "@parameters('queueUrl')",
+        "headers": {
+          "Content-Type": "application/xml",
+          "x-ms-version": "2023-11-03",
+          "x-ms-date": "@formatDateTime(utcNow(), 'R')"
+        },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "identity": "@parameters('workflowIdentity')",
+          "audience": "https://storage.azure.com/"
+        },
+        "body": "@concat('<QueueMessage><MessageText>', base64(triggerBody()?['id']), '</MessageText></QueueMessage>')",
+        "retryPolicy": { "type": "exponential", "count": 3, "interval": "PT10S" }
+      },
+      "runAfter": {}
+    }
+  },
+  "outputs": {}
+}
